@@ -679,6 +679,433 @@ uint8_t PN532::mifareultralight_WritePage (uint8_t page, uint8_t *buffer)
     return (0 < HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer)));
 }
 
+
+/***** NFC Forum Type 4 Tag Functions ******/
+
+/**************************************************************************/
+/*!
+    Selects NDEF application on target
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_select_ndef_application () {
+    uint8_t c_apdu[] = {
+        0x00, 0xA4, 0x04, 0x00, 0x07,
+        0xD2, 0x76, 0x00, 0x00, 0x85, 0x01, 0x01, 0x00
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (select ndef application)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (select ndef application)");
+        return 0;
+    }
+
+    if (pn532_packetbuffer[1] != 0x90 || pn532_packetbuffer[2] != 0x00) {
+        DMSG_STR("Error in ndef application selection");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Selects capability container file on target
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_select_cc () {
+    uint8_t c_apdu[] = {
+        0x00, 0xA4, 0x00, 0x0C, 0x02, 0xE1, 0x03
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (select cc)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (select cc)");
+        return 0;
+    }
+
+    if (pn532_packetbuffer[1] != 0x90 || pn532_packetbuffer[2] != 0x00) {
+        DMSG_STR("Error in cc file selection");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Selects NDEF file on target
+
+    @param  file_id     ID of the ndef file given in CC
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_select_ndef (uint16_t file_id) {
+    uint8_t c_apdu[] = {
+        0x00, 0xA4, 0x00, 0x0C, 0x02, file_id >> 8, file_id & 0xFF
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (select ndef)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (select ndef)");
+        return 0;
+    }
+
+    if (pn532_packetbuffer[1] != 0x90 || pn532_packetbuffer[2] != 0x00) {
+        DMSG_STR("Error in ndef file selection");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Reads CC file after having selected it
+
+    @param  length      Actual length of CC file (out)
+    @param  buffer      Pointer to the byte array that will hold the
+                        retrieved data (if any)
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_read_cc (uint16_t *length, uint8_t *buffer) {
+    uint8_t c_apdu[] = {
+        0x00, 0xB0, 0x00, 0x00, 0x0F
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (read cc)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (read cc)");
+        return 0;
+    }
+
+    *length = pn532_packetbuffer[1] << 8 | pn532_packetbuffer[2];
+    memcpy (buffer, pn532_packetbuffer + 1, *length);
+
+    if (pn532_packetbuffer[*length + 1] != 0x90 || pn532_packetbuffer[*length + 2] != 0x00) {
+        DMSG_STR("Error in cc reading");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Reads NDEF file after having selected it
+
+    @param  length      Actual length of NDEF file (out)
+    @param  buffer      Pointer to the byte array that will hold the
+                        retrieved data (if any)
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_read_ndef (uint16_t *length, uint8_t *buffer) {
+    /* Read file length */
+    uint8_t c_apdu[] = {
+        0x00, 0xB0, 0x00, 0x00, 0x02
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (read ndef length)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (read ndef length)");
+        return 0;
+    }
+
+    *length = pn532_packetbuffer[1] << 8 | pn532_packetbuffer[2];
+
+    /* Read file */
+    c_apdu[3] = 0x02;
+    c_apdu[4] = *length & 0xFF;
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (read ndef)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (read ndef)");
+        return 0;
+    }
+
+    memcpy (buffer, pn532_packetbuffer + 1, *length);
+
+    if (pn532_packetbuffer[*length + 1] != 0x90 || pn532_packetbuffer[*length + 2] != 0x00) {
+        DMSG_STR("Error in cc reading");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Tries to write NDEF file to the target after having selected it
+
+    @param  length     Length of data to write
+    @param  data       The byte array that contains the data to write.
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_write_ndef (uint8_t length, uint8_t *data) {
+    uint8_t c_apdu[] = {
+        0x00, 0xD6, 0x00, 0x00, length + 2, 0x00, 0x00
+    };
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+    memcpy(pn532_packetbuffer + 2 + sizeof(c_apdu), data, length);
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2 + length)) {
+        DMSG_STR("Error in writing command (write ndef)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (write ndef)");
+        return 0;
+    }
+
+    if (pn532_packetbuffer[1] != 0x90 || pn532_packetbuffer[2] != 0x00) {
+        DMSG_STR("Error in ndef file writing");
+        return 0;
+    }
+
+    c_apdu[4] = 0x02;
+    c_apdu[5] = length >> 8;
+    c_apdu[6] = length & 0xFF;
+
+    pn532_packetbuffer[0] = PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = 1;
+    memcpy(pn532_packetbuffer + 2, c_apdu, sizeof(c_apdu));
+
+    /* Send the command */
+    if (HAL(writeCommand)(pn532_packetbuffer, sizeof(c_apdu) + 2)) {
+        DMSG_STR("Error in writing command (write ndef length)");
+        return 0;
+    }
+
+    /* Read the response packet */
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (pn532_packetbuffer[0]) {
+        DMSG_STR("Error while reading data (write ndef length)");
+        return 0;
+    }
+
+    if (pn532_packetbuffer[1] != 0x90 || pn532_packetbuffer[2] != 0x00) {
+        DMSG_STR("Error in ndef file length writing");
+        return 0;
+    }
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Tries to read the NDEF data (according to 5.4.6 in spec)
+
+    @param  length      Actual length of retrieved data
+    @param  buffer      Pointer to the byte array that will hold the
+                        retrieved data (if any)
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_ReadFile (uint8_t *length, uint8_t *buffer)
+{
+    uint16_t buf_length;
+
+    if (!type4_select_ndef_application()) {
+        return 0;
+    }
+
+    if (!type4_select_cc()) {
+        return 0;
+    }
+
+    if (!type4_read_cc(&buf_length, buffer)) {
+        return 0;
+    }
+
+    /* Check mapping version */
+    if (buffer[2] >> 4 == TYPE4_MAPPING_MAJOR) {
+        if (buffer[2] & 0x0F > TYPE4_MAPPING_MINOR) {
+            DMSG_STR("WARNING : Mapping minor version outdated, Tag may have additionnal features not implemented on this device");
+        }
+    } else {
+        DMSG_STR("Mapping version not implemented");
+        return 0;
+    }
+
+    if (buffer[13] != 0x00) {
+        DMSG_STR("File isn't readable");
+        return 0;
+    }
+
+    uint16_t file_id = buffer[9] << 8 | buffer[10];
+
+    if (!type4_select_ndef(file_id)) {
+        return 0;
+    }
+
+    if (!type4_read_ndef(&buf_length, buffer)) {
+        return 0;
+    }
+
+    *length = buf_length & 0xFF;
+
+    return 1;
+}
+
+/**************************************************************************/
+/*!
+    Tries to write the NDEF data (according to 5.4.7 in spec)
+
+    @param  length      Length of data in buffer
+    @param  data        The byte array that contains the data to write.
+
+    @returns 1 if everything executed properly, 0 for an error
+*/
+/**************************************************************************/
+uint8_t PN532::type4_WriteFile (uint8_t length, uint8_t *data)
+{
+    uint16_t buf_length;
+    uint8_t buffer[32];
+
+    if (!type4_select_ndef_application()) {
+        return 0;
+    }
+
+    if (!type4_select_cc()) {
+        return 0;
+    }
+
+    if (!type4_read_cc(&buf_length, buffer)) {
+        return 0;
+    }
+
+    /* Check mapping version */
+    if (buffer[2] >> 4 == TYPE4_MAPPING_MAJOR) {
+        if (buffer[2] & 0x0F > TYPE4_MAPPING_MINOR) {
+            DMSG_STR("WARNING : Mapping minor version outdated, Tag may have additionnal features not implemented on this device");
+        }
+    } else {
+        DMSG_STR("Mapping version not implemented");
+        return 0;
+    }
+
+    if (buffer[13] != 0x00) {
+        DMSG_STR("File isn't readable");
+        return 0;
+    }
+
+    if (buffer[14] != 0x00) {
+        DMSG_STR("File isn't writeable");
+        return 0;
+    }
+
+    uint16_t file_id = buffer[9] << 8 | buffer[10];
+    uint16_t max_length = buffer[11] << 8 | buffer[12];
+
+    if (length > max_length - 2) {
+        DMSG_STR("Data to write is too long");
+        return 0;
+    }
+
+    if (!type4_select_ndef(file_id)) {
+        return 0;
+    }
+
+    if (!type4_write_ndef(length, data)) {
+        return 0;
+    }
+
+    return 1;
+}
+
+
 /**************************************************************************/
 /*!
     @brief  Exchanges an APDU with the currently inlisted peer

@@ -63,6 +63,10 @@
 #define MIFARE_CMD_INCREMENT                (0xC1)
 #define MIFARE_CMD_STORE                    (0xC2)
 
+// NFC Forum Type 4
+#define TYPE4_MAPPING_MAJOR                 (0x2)
+#define TYPE4_MAPPING_MINOR                 (0x0)
+
 // Prefixes for NDEF Records (to identify record type)
 #define NDEF_URIPREFIX_NONE                 (0x00)
 #define NDEF_URIPREFIX_HTTP_WWWDOT          (0x01)
@@ -155,6 +159,16 @@ public:
     // Mifare Ultralight functions
     uint8_t mifareultralight_ReadPage (uint8_t page, uint8_t *buffer);
     uint8_t mifareultralight_WritePage (uint8_t page, uint8_t *buffer);
+
+    // NFC Forum Type 4 Tag
+    uint8_t type4_select_ndef_application ();
+    uint8_t type4_select_cc ();
+    uint8_t type4_select_ndef (uint16_t file_id);
+    uint8_t type4_read_cc (uint16_t *length, uint8_t *buffer);
+    uint8_t type4_read_ndef (uint16_t *length, uint8_t *buffer);
+    uint8_t type4_write_ndef (uint8_t length, uint8_t *data);
+    uint8_t type4_ReadFile (uint8_t *length, uint8_t *buffer);
+    uint8_t type4_WriteFile (uint8_t length, uint8_t *buffer);
 
     // Help functions to display formatted text
     static void PrintHex(const uint8_t *data, const uint32_t numBytes);
