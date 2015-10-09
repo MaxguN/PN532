@@ -986,7 +986,7 @@ uint8_t PN532::type4_write_ndef (uint8_t length, uint8_t *data) {
 /*!
     Tries to read the NDEF data (according to 5.4.6 in spec)
 
-    @param  length      Actual length of retrieved data
+    @param  length      Actual length of retrieved data (up to 255 bytes)
     @param  buffer      Pointer to the byte array that will hold the
                         retrieved data (if any)
 
@@ -1284,6 +1284,42 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
     }
 
     return true;
+}
+
+uint8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint16_t uint16_t timeout) {
+    int8_t status = HAL(writeCommand)(command, len);
+    if (status < 0) {
+        return -1;
+    }
+
+    status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
+    if (status > 0) {
+        return 1;
+    } else if (PN532_TIMEOUT == status) {
+        return 0;
+    } else {
+        return -2;
+    }
+}
+
+uint8_t PN532::inJumpForDEP(uint16_t timeout) {
+    const uint8_t command[] = {
+        PN532_COMMAND_INJUMPFORDEP,
+        // TODO : check&fix parameters
+        0,
+        0x00, 0x00,         //SENS_RES
+        0x00, 0x00, 0x00,   //NFCID1
+        0x40,               //SEL_RES
+
+        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, // POL_RES
+        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+        0xFF, 0xFF,
+
+        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, 0x00, 0x00, //NFCID3t: Change this to desired value
+
+        0x06, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10, 0x00// LLCP magic number and version parameter
+    };
+    return inJumpForDEP(command, sizeof(command), timeout);
 }
 
 int16_t PN532::inRelease(const uint8_t relevantTarget){
