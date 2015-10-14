@@ -1286,7 +1286,7 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
     return true;
 }
 
-uint8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint16_t uint16_t timeout) {
+int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint16_t timeout) {
     int8_t status = HAL(writeCommand)(command, len);
     if (status < 0) {
         return -1;
@@ -1302,7 +1302,7 @@ uint8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uin
     }
 }
 
-uint8_t PN532::inJumpForDEP(uint16_t timeout) {
+int8_t PN532::inJumpForDEP(uint16_t timeout) {
     const uint8_t command[] = {
         PN532_COMMAND_INJUMPFORDEP,
         // TODO : check&fix parameters
@@ -1330,7 +1330,7 @@ int16_t PN532::inRelease(const uint8_t relevantTarget){
     if (HAL(writeCommand)(pn532_packetbuffer, 2)) {
         return 0;
     }
-
+    
     // read data packet
     return HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
 }
