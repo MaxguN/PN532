@@ -40,6 +40,28 @@ public:
     */
     int16_t read(uint8_t *buf, uint8_t len, uint16_t timeout = 0);
 
+    /**
+    * @brief    poll for another peer to communicate with and initiate connection if so
+    * @param    timeout max time to wait, 0 means no timeout
+    * @return   1       client
+    *           2       server
+    *           =0      timeout
+    *           <0      failed
+    */
+    int8_t poll(uint16_t timeout = 0);
+
+    int16_t get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout = 0);
+    int8_t put(const uint8_t *buf, uint8_t len, uint16_t timeout = 0);
+    int16_t serve(uint8_t *buf, uint8_t len, uint16_t timeout = 0);
+
+    /**
+    * @brief    terminate connection between peers
+    * @return   >0      success
+    *           =0      timeout
+    *           <0      failed
+    */
+    int8_t disconnect(uint16_t timeout);
+
 private:
 	LLCP llcp;
 	uint8_t *headerBuf;

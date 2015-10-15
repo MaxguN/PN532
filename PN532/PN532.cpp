@@ -225,6 +225,103 @@ uint8_t PN532::readGPIO(void)
     return pn532_packetbuffer[0];
 }
 
+int PN532::init(void) {
+    setParameters(PN532_PARAM_AUTO_ATR_RES | PN532_PARAM_AUTO_RATS);
+    resetSettings();
+}
+
+int PN532::initiatorInit(void) {
+    // resetSettings();
+    pn532_packetbuffer[0] = PN532_COMMAND_READREGISTER;
+    pn532_packetbuffer[1] = PN532_REG_CIU_Control >> 8;
+    pn532_packetbuffer[2] = PN532_REG_CIU_Control & 0xFF;
+
+    if (HAL(writeCommand)(pn532_packetbuffer, 1))
+        return 0;
+
+    int16_t res = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (res < 0) {
+        return 0;
+    }
+
+    pn532_packetbuffer[3] = pn532_packetbuffer[0] | PN532_SYMBOL_INITIATOR;
+    pn532_packetbuffer[0] = PN532_COMMAND_WRITEREGISTER;
+    pn532_packetbuffer[1] = PN532_REG_CIU_Control >> 8;
+    pn532_packetbuffer[2] = PN532_REG_CIU_Control & 0xFF;
+    
+    if (HAL(writeCommand)(pn532_packetbuffer, 1)) {
+        return 0;
+    }
+
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    return 1;
+}
+
+int PN532::resetSettings(void) {
+    pn532_packetbuffer[0] = PN532_COMMAND_READREGISTER;
+    pn532_packetbuffer[1] = PN532_REG_CIU_BitFraming >> 8;
+    pn532_packetbuffer[2] = PN532_REG_CIU_BitFraming & 0xFF;
+    pn532_packetbuffer[3] = PN532_REG_CIU_TxMode >> 8;
+    pn532_packetbuffer[4] = PN532_REG_CIU_TxMode & 0xFF;
+    pn532_packetbuffer[5] = PN532_REG_CIU_RxMode >> 8;
+    pn532_packetbuffer[6] = PN532_REG_CIU_RxMode & 0xFF;
+    pn532_packetbuffer[7] = PN532_REG_CIU_ManualRCV >> 8;
+    pn532_packetbuffer[8] = PN532_REG_CIU_ManualRCV & 0xFF;
+    pn532_packetbuffer[9] = PN532_REG_CIU_Status2 >> 8;
+    pn532_packetbuffer[10] = PN532_REG_CIU_Status2 & 0xFF;
+
+    if (HAL(writeCommand)(pn532_packetbuffer, 1))
+        return 0;
+
+    int16_t res = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    if (res < 0) {
+        return 0;
+    }
+
+    uint8_t registers[] = {pn532_packetbuffer[0], pn532_packetbuffer[1], pn532_packetbuffer[2], pn532_packetbuffer[3], pn532_packetbuffer[4]};
+
+    pn532_packetbuffer[0] = PN532_COMMAND_WRITEREGISTER;
+    pn532_packetbuffer[1] = PN532_REG_CIU_BitFraming >> 8;
+    pn532_packetbuffer[2] = PN532_REG_CIU_BitFraming & 0xFF;
+    pn532_packetbuffer[3] = registers[0] & ~(PN532_SYMBOL_TX_LAST_BITS);
+    pn532_packetbuffer[4] = PN532_REG_CIU_TxMode >> 8;
+    pn532_packetbuffer[5] = PN532_REG_CIU_TxMode & 0xFF;
+    pn532_packetbuffer[6] = registers[1] | PN532_SYMBOL_TX_CRC_ENABLE;
+    pn532_packetbuffer[7] = PN532_REG_CIU_RxMode >> 8;
+    pn532_packetbuffer[8] = PN532_REG_CIU_RxMode & 0xFF;
+    pn532_packetbuffer[9] = registers[2] | PN532_SYMBOL_RX_CRC_ENABLE;
+    pn532_packetbuffer[10] = PN532_REG_CIU_ManualRCV >> 8;
+    pn532_packetbuffer[11] = PN532_REG_CIU_ManualRCV & 0xFF;
+    pn532_packetbuffer[12] = registers[3] & ~(PN532_SYMBOL_PARITY_DISABLE);
+    pn532_packetbuffer[13] = PN532_REG_CIU_Status2 >> 8;
+    pn532_packetbuffer[14] = PN532_REG_CIU_Status2 & 0xFF;
+    pn532_packetbuffer[15] = registers[4] & ~(PN532_SYMBOL_MF_CRYPTO1_ON);
+    
+    if (HAL(writeCommand)(pn532_packetbuffer, 1)) {
+        return 0;
+    }
+
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    return 1;
+}
+
+int PN532::setParameters(uint8_t parameters) {
+    pn532_packetbuffer[0] = PN532_COMMAND_SETPARAMETERS;
+    pn532_packetbuffer[1] = parameters;
+    
+    if (HAL(writeCommand)(pn532_packetbuffer, 1)) {
+        return 0;
+    }
+
+    HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
+
+    return 1;
+}
+
 /**************************************************************************/
 /*!
     @brief  Configures the SAM (Secure Access Module)
@@ -280,13 +377,11 @@ bool PN532::setPassiveActivationRetries(uint8_t maxRetries)
                           with the card's UID (up to 7 bytes)
     @param  uidLength     Pointer to the variable that will hold the
                           length of the card's UID.
-    @param  timeout       The number of tries before timing out
-    @param  inlist        If set to true, the card will be inlisted
 
     @returns 1 if everything executed properly, 0 for an error
 */
 /**************************************************************************/
-bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uidLength, uint16_t timeout, bool inlist)
+bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uidLength, uint16_t timeout)
 {
     pn532_packetbuffer[0] = PN532_COMMAND_INLISTPASSIVETARGET;
     pn532_packetbuffer[1] = 1;  // max 1 cards at once (we can set this to 2 later)
@@ -330,10 +425,6 @@ bool PN532::readPassiveTargetID(uint8_t cardbaudrate, uint8_t *uid, uint8_t *uid
 
     for (uint8_t i = 0; i < pn532_packetbuffer[5]; i++) {
         uid[i] = pn532_packetbuffer[6 + i];
-    }
-
-    if (inlist) {
-        inListedTag = pn532_packetbuffer[1];
     }
 
     return 1;
@@ -1225,8 +1316,7 @@ int8_t PN532::tgInitAsTarget(uint16_t timeout)
 
         0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, 0x00, 0x00, //NFCID3t: Change this to desired value
 
-        0x0a, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10, 0x02, 0x02, 0x00, 0x80, // LLCP magic number, version parameter and MIUX
-        0x00
+        0x06, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10, 0x00// LLCP magic number and version parameter
     };
     return tgInitAsTarget(command, sizeof(command), timeout);
 }
@@ -1301,6 +1391,7 @@ int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint
 
     status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
     if (status > 0) {
+        inListedTag = pn532_packetbuffer[1];
         return 1;
     } else if (PN532_TIMEOUT == status) {
         return 0;
@@ -1312,19 +1403,10 @@ int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint
 int8_t PN532::inJumpForDEP(uint16_t timeout) {
     const uint8_t command[] = {
         PN532_COMMAND_INJUMPFORDEP,
-        // TODO : check&fix parameters
-        0,
-        0x00, 0x00,         //SENS_RES
-        0x00, 0x00, 0x00,   //NFCID1
-        0x40,               //SEL_RES
-
-        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, // POL_RES
-        0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-        0xFF, 0xFF,
-
-        0x01, 0xFE, 0x0F, 0xBB, 0xBA, 0xA6, 0xC9, 0x89, 0x00, 0x00, //NFCID3t: Change this to desired value
-
-        0x06, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10, 0x00// LLCP magic number and version parameter
+        0x01, // active
+        0x00, // 106kbps
+        0x04, // bit0 - passive | bit1 - NFCID3i (random if not given) | bit2 - General Bytes (need llcp magic number + llcp version)
+        0x06, 0x46,  0x66, 0x6D, 0x01, 0x01, 0x10 // LLCP magic number and version parameter
     };
     return inJumpForDEP(command, sizeof(command), timeout);
 }
@@ -1337,7 +1419,7 @@ int16_t PN532::inRelease(const uint8_t relevantTarget){
     if (HAL(writeCommand)(pn532_packetbuffer, 2)) {
         return 0;
     }
-    
+
     // read data packet
     return HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer));
 }

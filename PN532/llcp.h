@@ -23,7 +23,7 @@ public:
     *           = 0     timeout
     *           < 0     failed
     */
-	int8_t activate(uint16_t timeout = 0);
+	int8_t activate(uint16_t timeout = 0, bool isInitiator = false);
 
     int8_t waitForConnection(uint16_t timeout = LLCP_DEFAULT_TIMEOUT);
 
@@ -68,6 +68,7 @@ private:
     uint8_t headerBufLen;
     uint8_t ns;         // Number of I PDU Sent
     uint8_t nr;         // Number of I PDU Received
+    bool isInitiator;
 
 	static uint8_t SYMM_PDU[2];
 };

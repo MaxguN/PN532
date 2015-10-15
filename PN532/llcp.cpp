@@ -12,6 +12,8 @@
 #define PDU_I       0x0c
 #define PDU_RR      0x0d
 
+#define DEBUG_LLCP
+
 uint8_t LLCP::SYMM_PDU[2] = {0, 0};
 
 inline uint8_t getPType(const uint8_t *buf)
@@ -29,14 +31,31 @@ inline uint8_t getDSAP(const uint8_t *buf)
     return buf[0] >> 2;
 }
 
-int8_t LLCP::activate(uint16_t timeout)
+void print_hex(int16_t length, const uint8_t *data) {
+    Serial.print("data read (");
+    Serial.print(length);
+    Serial.print(")");
+    for (int i = 0; i < length; i += 1) {
+        Serial.print(" ");Serial.print(data[i], HEX);
+    }
+    Serial.println("");
+}
+
+int8_t LLCP::activate(uint16_t timeout, bool initiator)
 {
-    return link.activateAsTarget(timeout);
+    isInitiator = initiator;
+
+    if (isInitiator) {
+        return link.activateAsInitiator(timeout);
+    } else {
+        return link.activateAsTarget(timeout);
+    }
 }
 
 int8_t LLCP::waitForConnection(uint16_t timeout)
 {
     uint8_t type;
+    int16_t res;
 
     mode = 1;
     ns = 0;
@@ -45,7 +64,7 @@ int8_t LLCP::waitForConnection(uint16_t timeout)
     // Get CONNECT PDU
     DMSG("wait for a CONNECT PDU\n");
     do {
-        if (2 > link.read(headerBuf, headerBufLen)) {
+        if (res = link.read(headerBuf, headerBufLen) < 2) {
             return -1;
         }
 
@@ -115,6 +134,7 @@ int8_t LLCP::waitForDisconnection(uint16_t timeout)
 int8_t LLCP::connect(uint16_t timeout)
 {
     uint8_t type;
+    int16_t res;
 
     mode = 0;
     dsap = LLCP_DEFAULT_DSAP;
@@ -122,14 +142,25 @@ int8_t LLCP::connect(uint16_t timeout)
     ns = 0;
     nr = 0;
 
-    // try to get a SYMM PDU
-    if (2 > link.read(headerBuf, headerBufLen)) {
-        return -1;
-    }
-    type = getPType(headerBuf);
-    if (PDU_SYMM != type) {
-        return -1;
-    }
+    //  if (isInitiator) {
+    //     if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
+    //         Serial.println("Fail write symm ");
+    //         return -2;
+    //     }
+    //  }
+
+    // // try to get a SYMM PDU
+    // Serial.println("Before read connect");
+    // if (res = link.read(headerBuf, headerBufLen) < 2) {
+    //     Serial.println("Fail read symm");
+    //     print_hex(res, headerBuf);
+    //     return -1;
+    // }
+    // Serial.println("After read connect");
+    // type = getPType(headerBuf);
+    // if (PDU_SYMM != type) {
+    //     return -1;
+    // }
 
     // put a CONNECT PDU
     headerBuf[0] = (LLCP_DEFAULT_DSAP << 2) + (PDU_CONNECT >> 2);
@@ -138,6 +169,7 @@ int8_t LLCP::connect(uint16_t timeout)
     body[0] = 0x06;
     body[1] = sizeof(body) - 2 - 1;
     if (!link.write(headerBuf, 2, body, sizeof(body) - 1)) {
+        Serial.println("Fail write CONNECT PDU");
         return -2;
     }
 
@@ -227,9 +259,22 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
         headerBuf[i + 3] = header[i];
     }
 
+
     headerBuf[0] = (dsap << 2) + (PDU_I >> 2);
     headerBuf[1] = ((PDU_I & 0x3) << 6) + ssap;
     headerBuf[2] = (ns << 4) + nr;
+
+#ifdef DEBUG_LLCP
+    Serial.print((char)0x57);
+    for (i = 0; i < 3 + hlen; i += 1) {
+        Serial.print((char)0x20);Serial.print(headerBuf[i], HEX);
+    }
+    for (i = 0; i < blen; i += 1) {
+        Serial.print((char)0x20);Serial.print(body[i], HEX);
+    }
+    Serial.println();
+#endif
+
     if (!link.write(headerBuf, 3 + hlen, body, blen)) {
         return false;
     }
@@ -248,6 +293,9 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
         if (PDU_RR == type) {
             break;
         } else if (PDU_SYMM == type) {
+#ifdef DEBUG_LLCP
+            Serial.print((char)0x57);Serial.print((char)0x20);Serial.print((char)0x53);Serial.print((char)0x59);Serial.print((char)0x4D);Serial.print((char)0x4D);
+#endif
             if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
                 return false;
             }
@@ -256,9 +304,10 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
         }
     } while (1);
 
-    if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
-        return false;
-    }
+    // if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
+    //     Serial.println("llcp write failed");
+    //     return false;
+    // }
 
     return true;
 }
@@ -279,6 +328,9 @@ int16_t LLCP::read(uint8_t *buf, uint8_t length)
         if (PDU_I == type) {
             break;
         } else if (PDU_SYMM == type) {
+#ifdef DEBUG_LLCP
+            Serial.print((char)0x57);Serial.print((char)0x20);Serial.print((char)0x53);Serial.print((char)0x59);Serial.print((char)0x4D);Serial.print((char)0x4D);
+#endif
             if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
                 return -2;
             }
