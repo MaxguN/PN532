@@ -2,22 +2,22 @@
 #include "snep.h"
 #include "PN532_debug.h"
 
-// #define DEBUG_SNEP
+#define DEBUG_SNEP
 
 int8_t SNEP::write(const uint8_t *buf, uint8_t len, uint16_t timeout)
 {
-    Serial.println("Starting write");
+    DMS("Starting write\n");
 	if (0 >= llcp.activate(timeout)) {
 		DMSG("failed to activate PN532 as a target\n");
 		return -1;
 	}
-    Serial.println("llcp activated");
+    DMS("llcp activated\n");
 
 	if (0 >= llcp.connect(timeout)) {
 		DMSG("failed to set up a connection\n");
 		return -2;
 	}
-    Serial.println("llcp connected");
+    DMS("llcp connected\n");
 
 	// response a success SNEP message
 	headerBuf[0] = SNEP_DEFAULT_VERSION;
@@ -59,18 +59,18 @@ int8_t SNEP::write(const uint8_t *buf, uint8_t len, uint16_t timeout)
 
 int16_t SNEP::read(uint8_t *buf, uint8_t len, uint16_t timeout)
 {
-    Serial.println("Starting read");
+    DMS("Starting read\n");
 	if (0 >= llcp.activate(timeout)) {
 		DMSG("failed to activate PN532 as a target\n");
 		return -1;
 	}
-    Serial.println("llcp activated");
+    DMS("llcp activated\n");
 
 	if (0 >= llcp.waitForConnection(timeout)) {
 		DMSG("failed to set up a connection\n");
 		return -2;
 	}
-    Serial.println("llcp connected");
+    DMS("llcp connected\n");
 
 	uint16_t status = llcp.read(buf, len);
 	if (6 > status) {
@@ -182,6 +182,7 @@ int8_t SNEP::poll(uint16_t timeout) {
 int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 	uint8_t i;
 
+	DMS("get\n");
 	headerBuf[0] = SNEP_DEFAULT_VERSION;
 	headerBuf[1] = SNEP_REQUEST_GET;
 	headerBuf[2] = 0;
@@ -196,12 +197,12 @@ int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 	Serial.print((char)0x57);
 	for (i = 0; i < 10; i += 1) {
-		Serial.print((char)0x20);Serial.print(headerBuf[i], HEX);
+		DMS_HEX(headerBuf[i]);
 	}
 	for (i = 0; i < len; i += 1) {
-		Serial.print((char)0x20);Serial.print(buf[i], HEX);
+		DMS_HEX(buf[i]);
 	}
-	Serial.println();
+	DMS("\n");
 #endif
 
 	if (0 >= llcp.write(headerBuf, 10, buf, len)) {
@@ -232,9 +233,9 @@ int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 	Serial.print((char)0x52);
 	for (i = 0; i < length + 6; i += 1) {
-		Serial.print((char)0x20);Serial.print(rbuf[i], HEX);
+		DMS_HEX(rbuf[i]);
 	}
-	Serial.println();
+	DMS("\n");
 #endif
 
 	for (i = 0; i < length; i += 1) {
@@ -247,6 +248,8 @@ int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 int8_t SNEP::put(const uint8_t *buf, uint8_t len, uint16_t timeout) {
 	uint8_t i;
 
+	DMS("put\n");
+
 	headerBuf[0] = SNEP_DEFAULT_VERSION;
 	headerBuf[1] = SNEP_REQUEST_PUT;
 	headerBuf[2] = 0;
@@ -257,22 +260,22 @@ int8_t SNEP::put(const uint8_t *buf, uint8_t len, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 	Serial.print((char)0x57);
 	for (i = 0; i < 6; i += 1) {
-		Serial.print((char)0x20);Serial.print(headerBuf[i], HEX);
+		DMS_HEX(headerBuf[i]);
 	}
 	for (i = 0; i < len; i += 1) {
-		Serial.print((char)0x20);Serial.print(buf[i], HEX);
+		DMS_HEX(buf[i]);
 	}
-	Serial.println();
+	DMS("\n");
 #endif
 
 	if (0 >= llcp.write(headerBuf, 6, buf, len)) {
-		Serial.println(-3);
+		DMS(-3);
 		return -3;
 	}
 
 	uint8_t rbuf[16];
 	if (6 > llcp.read(rbuf, sizeof(rbuf))) {
-		Serial.println(-4);
+		DMS(-4);
 		return -4;
 	}
 
@@ -280,23 +283,23 @@ int8_t SNEP::put(const uint8_t *buf, uint8_t len, uint16_t timeout) {
 	if (SNEP_DEFAULT_VERSION != rbuf[0]) {
 		DMSG("The received SNEP message's major version is different\n");
 		// To-do: send Unsupported Version response
-		Serial.println(-5);
-		return -4;
+		DMS(-5);
+		return -5;
 	}
 
 	// expect a put request
 	if (SNEP_RESPONSE_SUCCESS != rbuf[1]) {
 		DMSG("Expect a success response\n");
-		Serial.println(-6);
-		return -4;
+		DMS(-6);
+		return -6;
 	}
 
 #ifdef DEBUG_SNEP
 	Serial.print((char)0x52);
 	for (i = 0; i < 6; i += 1) {
-		Serial.print((char)0x20);Serial.print(rbuf[i], HEX);
+		DMS_HEX(rbuf[i]);
 	}
-	Serial.println();
+	DMS("\n");
 #endif
 
 	return 1;
@@ -306,6 +309,7 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 	uint8_t rbuf[128];
 	uint8_t i;
 
+	DMS("serve\n");
 	if (6 > llcp.read(rbuf, sizeof(rbuf))) {
 		return -4;
 	}
@@ -323,9 +327,9 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 	Serial.print((char)0x52);
 	for (i = 0; i < length + 6; i += 1) {
-		Serial.print((char)0x20);Serial.print(rbuf[i], HEX);
+		DMS_HEX(rbuf[i]);
 	}
-	Serial.println();
+	DMS("\n");
 #endif
 
 	if (rbuf[1] == SNEP_REQUEST_GET) {
@@ -346,12 +350,12 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 		Serial.print((char)0x57);
 		for (i = 0; i < 6; i += 1) {
-			Serial.print((char)0x20);Serial.print(headerBuf[i], HEX);
+			DMS_HEX(headerBuf[i]);
 		}
 		for (i = 0; i < len; i += 1) {
-			Serial.print((char)0x20);Serial.print(buf[i], HEX);
+			DMS_HEX(buf[i]);
 		}
-		Serial.println();
+		DMS("\n");
 #endif
 
 		llcp.write(headerBuf, 6, buf, len);
@@ -372,9 +376,9 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 #ifdef DEBUG_SNEP
 		Serial.print((char)0x57);
 		for (i = 0; i < 6; i += 1) {
-			Serial.print((char)0x20);Serial.print(headerBuf[i], HEX);
+			DMS_HEX(headerBuf[i]);
 		}
-		Serial.println();
+		DMS("\n");
 
 		llcp.write(headerBuf, 6);
 #endif

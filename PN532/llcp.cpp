@@ -43,17 +43,134 @@ void print_hex(int16_t length, const uint8_t *data) {
 
 int8_t LLCP::activate(uint16_t timeout, bool initiator)
 {
+    int8_t res;
+    uint8_t body[] = {
+        0x01, 0x01, LLCP_DEFAULT_VERSION, // TLV version
+        0X03, 0X02, 0x00, 0x11 //TLV WKS
+    };
+    uint8_t type;
     isInitiator = initiator;
 
     if (isInitiator) {
-        return link.activateAsInitiator(timeout);
+        if (res = link.activateAsInitiator(timeout) <= 0) {
+            DMS("Fail activation as Initiator\n");
+            return res;
+        }
+        // send pax pdu
+        headerBuf[0] = PDU_PAX >> 2;
+        headerBuf[1] = (PDU_PAX & 0x03) << 6;
+        
+        if (!link.write(headerBuf, 2, body, 7)) {
+            DMS("Fail write PAX PDU\n");
+            return -2;
+        }
+
+        // wait for pax pdu
+        if (res = link.read(headerBuf, headerBufLen) < 2) {
+            DMS("read error (");
+            DMS(res);
+            DMS(")\n");
+            for (i = 0; i < res; i += 1) {
+                DMS_HEX(headerBuf[i]);
+            }
+            DMS("\n");
+            return -1;
+        }
+
+        // version # agreement
+        type = getPType(headerBuf);
+        if (PDU_PAX == type) {
+            uint8_t i = 2;
+            while (i < res) {
+                switch (headerBuf[i]) {
+                    case LLCP_PARAM_VERSION:
+                        i += 2;
+                        if ((headerBuf[i] & 0xF0) != (LLCP_DEFAULT_VERSION & 0xF0) ||
+                            (headerBuf[i] & 0x0F) != (LLCP_DEFAULT_VERSION & 0x0F)) {
+                            return -3;
+                        }
+                        break;
+                    case LLCP_PARAM_WKS:
+                        i += 2;
+                        break;
+                    default:
+                        break;
+                }
+
+                i += headerBuf[i - 1];
+            }
+        } else {
+            DMS("Unexpected PDU (expecting PDU_PAX)\n");
+            return -2;
+        }
+
+        // MIU determination - default : 128B
+        // TODO
     } else {
-        return link.activateAsTarget(timeout);
+        if (res = link.activateAsTarget(timeout); <= 0) {
+            DMS("Fail activation as Target\n");
+            return res;
+        }
+        
+        // wait for pax pdu
+        if (res = link.read(headerBuf, headerBufLen) < 2) {
+            DMS("read error (");
+            DMS(res);
+            DMS(")\n");
+            for (i = 0; i < res; i += 1) {
+                DMS_HEX(headerBuf[i]);
+            }
+            DMS("\n");
+            return -1;
+        }
+
+        // version # agreement
+        type = getPType(headerBuf);
+        if (PDU_PAX == type) {
+            uint8_t i = 2;
+            while (i < res) {
+                switch (headerBuf[i]) {
+                    case LLCP_PARAM_VERSION:
+                        i += 2;
+                        if ((headerBuf[i] & 0xF0) != (LLCP_DEFAULT_VERSION & 0xF0) ||
+                            (headerBuf[i] & 0x0F) != (LLCP_DEFAULT_VERSION & 0x0F)) {
+                            return -3;
+                        }
+                        break;
+                    case LLCP_PARAM_WKS:
+                        i += 2;
+                        break;
+                    default:
+                        break;
+                }
+
+                i += headerBuf[i - 1];
+            }
+        } else {
+            DMS("Unexpected PDU (expecting PDU_PAX)\n");
+            return -2;
+        }
+
+        // MIU determination - default : 128B
+        // TODO
+        
+        // send pax pdu
+        headerBuf[0] = PDU_PAX >> 2;
+        headerBuf[1] = (PDU_PAX & 0x03) << 6;
+        
+        if (!link.write(headerBuf, 2, body, 7)) {
+            DMS("Fail write PAX PDU\n");
+            return -2;
+        }
     }
+
+    return res;
 }
 
 int8_t LLCP::waitForConnection(uint16_t timeout)
 {
+    DMS("wait for connection\n");
+    uint8_t i;
     uint8_t type;
     int16_t res;
 
@@ -65,17 +182,28 @@ int8_t LLCP::waitForConnection(uint16_t timeout)
     DMSG("wait for a CONNECT PDU\n");
     do {
         if (res = link.read(headerBuf, headerBufLen) < 2) {
+            DMS("read error (");
+            DMS(res);
+            DMS(")\n");
+            for (i = 0; i < res; i += 1) {
+                DMS_HEX(headerBuf[i]);
+            }
+            DMS("\n");
             return -1;
         }
 
         type = getPType(headerBuf);
         if (PDU_CONNECT == type) {
+            DMS("PDU_CONNECT\n");
             break;
         } else if (PDU_SYMM == type) {
+            DMS("PDU_SYMM\n");
             if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
+                DMS("write error\n");
                 return -2;
             }
         } else {
+            DMS("other PDU\n");
             return -3;
         }
 
@@ -88,6 +216,7 @@ int8_t LLCP::waitForConnection(uint16_t timeout)
     headerBuf[0] = (dsap << 2) + ((PDU_CC >> 2) & 0x3);
     headerBuf[1] = ((PDU_CC & 0x3) << 6) + ssap;
     if (!link.write(headerBuf, 2)) {
+        DMS("write error\n");
         return -2;
     }
 
@@ -133,6 +262,7 @@ int8_t LLCP::waitForDisconnection(uint16_t timeout)
 
 int8_t LLCP::connect(uint16_t timeout)
 {
+    DMS("connect\n");
     uint8_t type;
     int16_t res;
 
@@ -169,25 +299,30 @@ int8_t LLCP::connect(uint16_t timeout)
     body[0] = 0x06;
     body[1] = sizeof(body) - 2 - 1;
     if (!link.write(headerBuf, 2, body, sizeof(body) - 1)) {
-        Serial.println("Fail write CONNECT PDU");
+        DMS("Fail write CONNECT PDU\n");
         return -2;
     }
 
     // wait for a CC PDU
-    DMSG("wait for a CC PDU\n");
+    DMS("wait for a CC PDU\n");
     do {
         if (2 > link.read(headerBuf, headerBufLen)) {
+            DMS("read error\n");
             return -1;
         }
 
         type = getPType(headerBuf);
         if (PDU_CC == type) {
+            DMS("PDU_CC\n");
             break;
         } else if (PDU_SYMM == type) {
+            DMS("PDU_SYMM\n");
             if (!link.write(SYMM_PDU, sizeof(SYMM_PDU))) {
+                DMS("write error\n");
                 return -2;
             }
         } else {
+            DMS("other PDU\n");
             return -3;
         }
 
@@ -243,6 +378,7 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
 {
     uint8_t type;
     uint8_t buf[3];
+    int8_t i;
 
     if (mode) {
         // Get a SYMM PDU
@@ -255,7 +391,8 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
         return false;
     }
 
-    for (int8_t i = hlen - 1; i >= 0; i--) {
+
+    for (i = hlen - 1; i >= 0; i--) {
         headerBuf[i + 3] = header[i];
     }
 
@@ -314,13 +451,22 @@ bool LLCP::write(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8
 
 int16_t LLCP::read(uint8_t *buf, uint8_t length)
 {
+    uint8_t i;
     uint8_t type;
     uint16_t status;
 
     // Get INFO PDU
     do {
         status = link.read(buf, length);
+#ifdef DEBUG_LLCP
+        DMS((char)0x52);
+        for (i = 0; i < 0; i += 1) {
+            DMS_HEX(buf[i]);
+        }
+        DMS("\n");
+#endif
         if (2 > status) {
+            DMS("Not enough data\n");
             return -1;
         }
 

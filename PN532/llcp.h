@@ -8,6 +8,10 @@
 #define LLCP_DEFAULT_DSAP     0x04
 #define LLCP_DEFAULT_SSAP     0x20
 
+#define LLCP_PARAM_VERSION     0x01
+#define LLCP_PARAM_WKS         0x03
+
+
 class LLCP {
 public:
 	LLCP(PN532Interface &interface) : link(interface) {

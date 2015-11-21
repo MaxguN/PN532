@@ -1227,11 +1227,15 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
     pn532_packetbuffer[1] = inListedTag;
 
     if (HAL(writeCommand)(pn532_packetbuffer, 2, send, sendLength)) {
+        DMS("Error write in\n");
         return false;
     }
 
     int16_t status = HAL(readResponse)(response, *responseLength, 1000);
     if (status < 0) {
+        DMS("Error read in");
+        DMS_HEX(status);
+        DMS("\n");
         return false;
     }
 
@@ -1288,18 +1292,22 @@ bool PN532::inListPassiveTarget()
 }
 
 int8_t PN532::tgInitAsTarget(const uint8_t* command, const uint8_t len, const uint16_t timeout){
-  
-  int8_t status = HAL(writeCommand)(command, len);
+    DMS("tgInitAsTarget\n");
+    int8_t status = HAL(writeCommand)(command, len);
     if (status < 0) {
+        DMS("write error\n");
         return -1;
     }
 
     status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
     if (status > 0) {
+        DMS("ok\n");
         return 1;
     } else if (PN532_TIMEOUT == status) {
+        DMS("timeout\n");
         return 0;
     } else {
+        DMS("error\n");
         return -2;
     }
 }
@@ -1330,14 +1338,19 @@ int8_t PN532::tgInitAsTarget(uint16_t timeout)
 
 int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
 {
+    DMS("tgGetData\n");
     buf[0] = PN532_COMMAND_TGGETDATA;
 
     if (HAL(writeCommand)(buf, 1)) {
+        DMS("Error write tg\n");
         return -1;
     }
 
     int16_t status = HAL(readResponse)(buf, len, 3000);
     if (0 >= status) {
+        DMS("Error read tg");
+        DMS_HEX(status);
+        DMS("\n");
         return status;
     }
 
@@ -1358,6 +1371,7 @@ int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
 
 bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8_t blen)
 {
+    DMS("tgSetData\n");
     if (hlen > (sizeof(pn532_packetbuffer) - 1)) {
         if ((body != 0) || (header == pn532_packetbuffer)) {
             DMSG("tgSetData:buffer too small\n");
@@ -1391,18 +1405,29 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
 }
 
 int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint16_t timeout) {
+    DMS("inJumpForDEP\n");
+    uint8_t i;
     int8_t status = HAL(writeCommand)(command, len);
     if (status < 0) {
+        DMS("write error\n");
         return -1;
     }
 
+
     status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
     if (status > 0) {
+        DMS("ok\n");
+        for (i = 0; i < status; i += 1) {
+            DMS_HEX(pn532_packetbuffer[i]);
+        }
+        DMS("\n");
         inListedTag = pn532_packetbuffer[1];
         return 1;
     } else if (PN532_TIMEOUT == status) {
+        DMS("timeout\n");
         return 0;
     } else {
+        DMS("error\n");
         return -2;
     }
 }

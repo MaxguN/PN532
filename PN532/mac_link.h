@@ -9,7 +9,7 @@
 
 class MACLink {
 public:
-    MACLink(PN532Interface &interface) : pn532(interface), isInitiator(false) {
+    MACLink(PN532Interface &interface) : pn532(interface), isInitiator(false), linkBufferLength(0) {
 
     };
     
@@ -40,7 +40,7 @@ public:
     * @return   true    success
     *           false   failed
     */
-    int16_t write(const uint8_t *header, uint8_t hlen, const uint8_t *body = 0, uint8_t blen = 0);
+    bool write(const uint8_t *header, uint8_t hlen, const uint8_t *body = 0, uint8_t blen = 0);
 
     /**
     * @brief    read a PDU packet, the packet will be less than (255 - 2) bytes
