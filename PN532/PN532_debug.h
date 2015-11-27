@@ -2,7 +2,7 @@
 #define __DEBUG_H__
 
 // #define DEBUG
-#define DEBUGSNEP
+// #define DEBUGSNEP
 
 #include "Arduino.h"
 

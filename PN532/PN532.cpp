@@ -1233,8 +1233,8 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
 
     int16_t status = HAL(readResponse)(response, *responseLength, 1000);
     if (status < 0) {
-        DMS("Error read in");
-        DMS_HEX(status);
+        DMS("Error read in ");
+        DMS(status);
         DMS("\n");
         return false;
     }
@@ -1255,6 +1255,76 @@ bool PN532::inDataExchange(uint8_t *send, uint8_t sendLength, uint8_t *response,
         response[i] = response[i + 1];
     }
     *responseLength = length;
+
+    return true;
+}
+
+bool PN532::inDataWrite(const uint8_t *header, uint8_t headerLength, const uint8_t *body, uint8_t bodyLength) {
+    if (headerLength > (sizeof(pn532_packetbuffer) - 2)) {
+        DMS("buffer too small\n");
+    }
+
+    for (int8_t i = headerLength - 1; i >= 0; i -= 1) {
+        pn532_packetbuffer[i + 2] = header[i];
+    }
+
+    pn532_packetbuffer[0] = 0x40; // PN532_COMMAND_INDATAEXCHANGE;
+    pn532_packetbuffer[1] = inListedTag;
+
+    DMS("(wire write)");
+    for (int i = 0; i < headerLength + 2; i += 1) {
+        DMS_HEX(pn532_packetbuffer[i]);
+    }
+    for (int i = 0; i < bodyLength; i += 1) {
+        DMS_HEX(body[i]);
+    }
+    DMS("\n");
+
+    int result = HAL(writeCommand)(pn532_packetbuffer, headerLength + 2, body, bodyLength);
+    if (result == PN532_TIMEOUT) {
+        DMS("Timeout (inDataWrite)\n");
+        return false;
+    } else if (result == PN532_INVALID_ACK) {
+        DMS("Error write initiator\n");
+        return false;
+    }
+
+    return true;
+}
+
+bool PN532::inDataRead(uint8_t *response, uint8_t *responseLength) {
+    uint8_t i;
+    int16_t status = HAL(readResponse)(response, *responseLength, 1000);
+
+    if (status < 0) {
+        DMS("Error read initiator ");
+        DMS(status);
+        DMS("\n");
+        return false;
+    }
+
+    if ((response[0] & 0x3f) != 0) {
+        DMSG("Status code indicates an error\n");
+        return false;
+    }
+
+    uint8_t length = status;
+    length -= 1;
+
+    if (length > *responseLength) {
+        length = *responseLength; // silent truncation...
+    }
+
+    for (uint8_t i = 0; i < length; i++) {
+        response[i] = response[i + 1];
+    }
+    *responseLength = length;
+
+    DMS("(wire read)");
+    for (int i = 0; i < *responseLength; i += 1) {
+        DMS_HEX(response[i]);
+    }
+    DMS("\n");
 
     return true;
 }
@@ -1292,9 +1362,12 @@ bool PN532::inListPassiveTarget()
 }
 
 int8_t PN532::tgInitAsTarget(const uint8_t* command, const uint8_t len, const uint16_t timeout){
-    DMS("tgInitAsTarget\n");
+    DMSG("tgInitAsTarget\n");
     int8_t status = HAL(writeCommand)(command, len);
-    if (status < 0) {
+    if (status == PN532_TIMEOUT) {
+        DMSG("timeout\n");
+        return 0;
+    } else if (status == PN532_INVALID_ACK) {
         DMS("write error\n");
         return -1;
     }
@@ -1304,10 +1377,10 @@ int8_t PN532::tgInitAsTarget(const uint8_t* command, const uint8_t len, const ui
         DMS("ok\n");
         return 1;
     } else if (PN532_TIMEOUT == status) {
-        DMS("timeout\n");
+        DMSG("read timeout\n");
         return 0;
     } else {
-        DMS("error\n");
+        DMS("read error\n");
         return -2;
     }
 }
@@ -1338,7 +1411,7 @@ int8_t PN532::tgInitAsTarget(uint16_t timeout)
 
 int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
 {
-    DMS("tgGetData\n");
+    DMSG("tgGetData\n");
     buf[0] = PN532_COMMAND_TGGETDATA;
 
     if (HAL(writeCommand)(buf, 1)) {
@@ -1366,12 +1439,18 @@ int16_t PN532::tgGetData(uint8_t *buf, uint8_t len)
         buf[i] = buf[i + 1];
     }
 
+    DMS("(wire read)");
+    for (int i = 0; i < length; i += 1) {
+        DMS_HEX(buf[i]);
+    }
+    DMS("\n");
+
     return length;
 }
 
 bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, uint8_t blen)
 {
-    DMS("tgSetData\n");
+    DMSG("tgSetData\n");
     if (hlen > (sizeof(pn532_packetbuffer) - 1)) {
         if ((body != 0) || (header == pn532_packetbuffer)) {
             DMSG("tgSetData:buffer too small\n");
@@ -1379,6 +1458,16 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
         }
 
         pn532_packetbuffer[0] = PN532_COMMAND_TGSETDATA;
+
+        DMS("(wire write)");
+        for (int i = 0; i < 1; i += 1) {
+            DMS_HEX(pn532_packetbuffer[i]);
+        }
+        for (int i = 0; i < hlen; i += 1) {
+            DMS_HEX(header[i]);
+        }
+        DMS("\n");
+
         if (HAL(writeCommand)(pn532_packetbuffer, 1, header, hlen)) {
             return false;
         }
@@ -1387,6 +1476,15 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
             pn532_packetbuffer[i + 1] = header[i];
         }
         pn532_packetbuffer[0] = PN532_COMMAND_TGSETDATA;
+
+        DMS("(wire write)");
+        for (int i = 0; i < hlen + 1; i += 1) {
+            DMS_HEX(pn532_packetbuffer[i]);
+        }
+        for (int i = 0; i < blen; i += 1) {
+            DMS_HEX(body[i]);
+        }
+        DMS("\n");
 
         if (HAL(writeCommand)(pn532_packetbuffer, hlen + 1, body, blen)) {
             return false;
@@ -1405,10 +1503,13 @@ bool PN532::tgSetData(const uint8_t *header, uint8_t hlen, const uint8_t *body, 
 }
 
 int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint16_t timeout) {
-    DMS("inJumpForDEP\n");
+    DMSG("inJumpForDEP\n");
     uint8_t i;
     int8_t status = HAL(writeCommand)(command, len);
-    if (status < 0) {
+    if (status == PN532_TIMEOUT) {
+        DMSG("timeout\n");
+        return 0;
+    } else if (status == PN532_INVALID_ACK) {
         DMS("write error\n");
         return -1;
     }
@@ -1416,18 +1517,13 @@ int8_t PN532::inJumpForDEP(const uint8_t* command, const uint8_t len, const uint
 
     status = HAL(readResponse)(pn532_packetbuffer, sizeof(pn532_packetbuffer), timeout);
     if (status > 0) {
-        DMS("ok\n");
-        for (i = 0; i < status; i += 1) {
-            DMS_HEX(pn532_packetbuffer[i]);
-        }
-        DMS("\n");
         inListedTag = pn532_packetbuffer[1];
         return 1;
     } else if (PN532_TIMEOUT == status) {
-        DMS("timeout\n");
+        DMSG("read timeout\n");
         return 0;
     } else {
-        DMS("error\n");
+        DMS("read error\n");
         return -2;
     }
 }

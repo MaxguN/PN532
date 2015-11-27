@@ -50,7 +50,7 @@ int8_t PN532_SPI::writeCommand(const uint8_t *header, uint8_t hlen, const uint8_
         timeout--;
         if (0 == timeout) {
             DMSG("Time out when waiting for ACK\n");
-            return -2;
+            return PN532_TIMEOUT;
         }
     }
     if (readAckFrame()) {

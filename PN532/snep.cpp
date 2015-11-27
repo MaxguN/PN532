@@ -159,6 +159,10 @@ int8_t SNEP::poll(uint16_t timeout) {
 		}
     } while (loop);
 
+    DMS("result=");
+    DMS(result);
+    DMS("\n");
+
     if (result == 0) {
     	return result;
     }
@@ -195,7 +199,7 @@ int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 	headerBuf[9] = maxlen;
 
 #ifdef DEBUG_SNEP
-	Serial.print((char)0x57);
+	DMS("W");
 	for (i = 0; i < 10; i += 1) {
 		DMS_HEX(headerBuf[i]);
 	}
@@ -231,7 +235,7 @@ int16_t SNEP::get(uint8_t *buf, uint8_t len, uint8_t maxlen, uint16_t timeout) {
 	length = rbuf[5];
 
 #ifdef DEBUG_SNEP
-	Serial.print((char)0x52);
+	DMS("R");
 	for (i = 0; i < length + 6; i += 1) {
 		DMS_HEX(rbuf[i]);
 	}
@@ -258,7 +262,7 @@ int8_t SNEP::put(const uint8_t *buf, uint8_t len, uint16_t timeout) {
 	headerBuf[5] = len;
 
 #ifdef DEBUG_SNEP
-	Serial.print((char)0x57);
+    DMS("(SNEP write)");
 	for (i = 0; i < 6; i += 1) {
 		DMS_HEX(headerBuf[i]);
 	}
@@ -273,31 +277,35 @@ int8_t SNEP::put(const uint8_t *buf, uint8_t len, uint16_t timeout) {
 		return -3;
 	}
 
-	uint8_t rbuf[16];
-	if (6 > llcp.read(rbuf, sizeof(rbuf))) {
+	if (6 > llcp.read(headerBuf, headerBufLen)) {
 		DMS(-4);
 		return -4;
 	}
 
 	// check SNEP version
-	if (SNEP_DEFAULT_VERSION != rbuf[0]) {
-		DMSG("The received SNEP message's major version is different\n");
+	if (SNEP_DEFAULT_VERSION != headerBuf[0]) {
+		DMS("Local version");
+		DMS_HEX(SNEP_DEFAULT_VERSION);
+		DMS("\nRemote version");
+		DMS_HEX(headerBuf[0]);
+		DMS("The received SNEP message's major version is different\n");
 		// To-do: send Unsupported Version response
 		DMS(-5);
+		DMS("\n");
 		return -5;
 	}
 
 	// expect a put request
-	if (SNEP_RESPONSE_SUCCESS != rbuf[1]) {
+	if (SNEP_RESPONSE_SUCCESS != headerBuf[1]) {
 		DMSG("Expect a success response\n");
 		DMS(-6);
 		return -6;
 	}
 
 #ifdef DEBUG_SNEP
-	Serial.print((char)0x52);
+	DMS("R");
 	for (i = 0; i < 6; i += 1) {
-		DMS_HEX(rbuf[i]);
+		DMS_HEX(headerBuf[i]);
 	}
 	DMS("\n");
 #endif
@@ -311,12 +319,19 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 
 	DMS("serve\n");
 	if (6 > llcp.read(rbuf, sizeof(rbuf))) {
+		DMS("SNEP read too short\n");
 		return -4;
 	}
 
+	DMS("SNEP read ok\n");
+
 	// check SNEP version
 	if (SNEP_DEFAULT_VERSION != rbuf[0]) {
-		DMSG("The received SNEP message's major version is different\n");
+		DMS("Local version");
+		DMS_HEX(SNEP_DEFAULT_VERSION);
+		DMS("\nRemote version");
+		DMS_HEX(rbuf[0]);
+		DMS("The received SNEP message's major version is different\n");
 		// To-do: send Unsupported Version response
 		return -4;
 	}
@@ -325,7 +340,7 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 	length = rbuf[5];
 
 #ifdef DEBUG_SNEP
-	Serial.print((char)0x52);
+	DMS("R");
 	for (i = 0; i < length + 6; i += 1) {
 		DMS_HEX(rbuf[i]);
 	}
@@ -335,8 +350,12 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 	if (rbuf[1] == SNEP_REQUEST_GET) {
 		length = rbuf[9];
 
-		if (len < length) {
-			DMSG("Message too big for client\n");
+		if (length <  len) {
+			DMS("Message too big for client\n");
+			DMS(len);
+			DMS("<");
+			DMS(length);
+			DMS("\n");
 			return -4;
 		}
 
@@ -348,7 +367,7 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 		headerBuf[5] = len;
 
 #ifdef DEBUG_SNEP
-		Serial.print((char)0x57);
+		DMS("W");
 		for (i = 0; i < 6; i += 1) {
 			DMS_HEX(headerBuf[i]);
 		}
@@ -374,14 +393,15 @@ int16_t SNEP::serve(uint8_t *buf, uint8_t len, uint16_t timeout) {
 		headerBuf[5] = 0;
 
 #ifdef DEBUG_SNEP
-		Serial.print((char)0x57);
+		DMS("W");
 		for (i = 0; i < 6; i += 1) {
 			DMS_HEX(headerBuf[i]);
 		}
 		DMS("\n");
 
-		llcp.write(headerBuf, 6);
 #endif
+
+		llcp.write(headerBuf, 6);
 
 		return length;
 	} else {
